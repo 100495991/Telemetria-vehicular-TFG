@@ -89,12 +89,17 @@ static void parsearPaquete() {
         }
 
         case 0x53: { // Angulos
-            accel.roll  = raw0 / 32768.0f * 180.0f;
-            accel.pitch = raw1 / 32768.0f * 180.0f;
+            // dos valores iniciales sumados por fallo de calibración.
+            // roll y pitch van intercambiados respecto al datasheet por la
+            // disposición física del sensor en el dispositivo: raw0 (eje X
+            // del sensor) es el pitch real y raw1 (eje Y del sensor) es el
+            // roll real.
+            accel.roll  = 2.3f + raw1 / 32768.0f * 180.0f;
+            accel.pitch = 9.7f + raw0 / 32768.0f * 180.0f;
             // raw2 siempre 0x0000 en WT31N (sin Yaw)
 
             if (_orientacionVertical) {
-                accel.pitch += 90.0f; // WT31N montado verticalmente, eje Y apunta hacia el suelo
+                accel.roll += 90.0f; // WT31N montado verticalmente, eje Y apunta hacia el suelo
             }
 
             accel.temperatura = temperatura;

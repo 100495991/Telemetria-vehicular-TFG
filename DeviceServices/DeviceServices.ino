@@ -12,8 +12,8 @@ bool primerFixObtenido = false;
 // =============================================================================
 void setup() {
 
-    Serial.begin(BAUD_DEBUG);    // Monitor serie del PC (debug)
-    delay(500);
+    // Serial.begin(BAUD_DEBUG);    // Monitor serie del PC (debug)
+    // delay(500);
     setupSDCard();               // Inicializa SD + abre LOG.TXT
     setupGPS();                  // Inicializa Serial1 + estructura InfoGPS
     setupAccelerometer();        // Inicializa Serial2 + acelerometro

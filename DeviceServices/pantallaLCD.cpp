@@ -215,7 +215,9 @@ static void gestionarTouch();
 
 void setupPantalla() {
     uint16_t ID = tft.readID();
-    Serial.print(F("[TFT] Driver detectado: 0x")); Serial.println(ID, HEX);
+    char bufID[32];
+    snprintf(bufID, sizeof(bufID), "[TFT] Driver detectado: 0x%X", ID);
+    logEvento(bufID);
     if (ID == 0xD3D3) ID = 0x9486; // fallback si la lectura falla
     tft.begin(ID);
 
@@ -544,7 +546,7 @@ static void actualizarPaginaHome(bool forzar) {
     // igual que la página Dinámica, para no saturar la pantalla con el IMU.
     static unsigned long ultimoRefrescoG = 0;
     if (!forzar && millis() - ultimoRefrescoG < ACCEL_REFRESCO_MS) return;
-    ultimoRefrescoG = millis();
+    ultimoRefrescoG = millis(); 
 
     // Sin lectura valida del IMU, la bola se queda congelada donde estaba en
     // vez de irse a una posicion calculada con datos viejos/basura.
@@ -552,8 +554,8 @@ static void actualizarPaginaHome(bool forzar) {
 
     // Bola de G: borrar posición anterior, repintar guía y dibujar la nueva
     int cx = HOME_CX1, cy = HOME_Y2 + HOME_TARJ_H / 2 + 8;
-    int gx = cx + constrain((int)(accel.ax * 35), -(HOME_G_R - 6), HOME_G_R - 6);
-    int gy = cy + constrain((int)(accel.ay * 35), -(HOME_G_R - 6), HOME_G_R - 6);
+    int gx = cx - constrain((int)(accel.ax * 35), -(HOME_G_R - 6), HOME_G_R - 6);
+    int gy = cy - constrain((int)(accel.ay * 35), -(HOME_G_R - 6), HOME_G_R - 6);
     if (gx != gx_ant || gy != gy_ant) {
         if (gx_ant != -1) tft.fillCircle(gx_ant, gy_ant, 4, COLOR_PANEL);
         dibujarGuiaBolaG(); // restaura la guía que el borrado pueda haber tapado

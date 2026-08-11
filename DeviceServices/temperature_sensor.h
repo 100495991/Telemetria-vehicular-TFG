@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include <SdFat.h>
 #include <Adafruit_MLX90614.h>
+#include <Wire.h>
 
 // -----------------------------------------------------------------------------
 // Estructura de datos  —  equivalente al diccionario "info" de los otros módulos
@@ -28,14 +29,7 @@ extern Adafruit_MLX90614 termometroIR;
 // Prototipos de funciones
 // -----------------------------------------------------------------------------
 void setupTemperatureSensor();
-void inicializarInfoTemp();
 void leerTemperatura();  // Debe llamarse en cada iteración del loop()
-
-// -----------------------------------------------------------------------------
-// Serialización CSV — cada módulo se encarga de sus propias columnas
-// -----------------------------------------------------------------------------
-// Escriben en 'dst' (como mucho 'espacio' bytes, '\0' incluido) y devuelven los
-// caracteres escritos. Sin lectura fiable, escribirDatosTemp deja las columnas vacias.
 size_t escribirCabeceraTemp(char* dst, size_t espacio);
 size_t escribirDatosTemp(char* dst, size_t espacio);
 
