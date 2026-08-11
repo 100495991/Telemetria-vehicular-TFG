@@ -1,0 +1,14 @@
+# Entorno virtual local (no forma parte del stack Docker)
+.venv/
+__pycache__/
+*.pyc
+
+# Secretos y datos locales
+.env
+platform/mosquitto/passwd
+platform/mosquitto/data/
+platform/mosquitto/log/
+app/frontend/.htpasswd
+
+# CSV historicos generados por el message_router antiguo
+telemetria_recibida*.csv

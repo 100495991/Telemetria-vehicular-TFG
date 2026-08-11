@@ -1,0 +1,112 @@
+# =============================================================================
+# Stack CloudServices — TFG Telemetria Vehicular UC3M
+#
+#   Arduino (SIM800L) --MQTT--> mosquitto --> ingestor --> MySQL
+#                                                            ^
+#                                                            |
+#                                          web (nginx) <-- api (FastAPI)
+#
+# Distribucion en carpetas:
+#   platform/               broker MQTT (mosquitto) + message_router
+#   microservices/database/ gestion de la BBDD: esquema (init/) + ingestor
+#   app/backend/            API FastAPI
+#   app/frontend/           dashboard web (nginx)
+#
+# Arranque:  docker compose up -d --build
+# Dashboard: http://localhost:${WEB_HOST_PORT}
+# =============================================================================
+
+services:
+
+  # --- Broker MQTT ---------------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: tfg_mosquitto
+    restart: unless-stopped
+    ports:
+      - "${MQTT_HOST_PORT:-1883}:1883"
+    volumes:
+      - ./platform/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./platform/mosquitto/passwd:/mosquitto/config/passwd:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      # mosquitto_sub sale con codigo 0 si el broker responde al CONNECT.
+      # Necesita credenciales porque allow_anonymous esta desactivado.
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -W 2 -h localhost -u ${MQTT_USER} -P ${MQTT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Base de datos -------------------------------------------------------
+  db:
+    image: mysql:8.0
+    container_name: tfg_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      # Los .sql de este directorio se ejecutan solo al inicializar la BD vacia
+      - ./microservices/database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # --- Ingestor MQTT -> MySQL (gestion de la BBDD) ------------------------
+  ingestor:
+    build: ./microservices/database
+    container_name: tfg_ingestor
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: ${MQTT_BROKER_HOST:-mosquitto}
+      MQTT_PORT: ${MQTT_BROKER_PORT:-1883}
+      MQTT_TOPIC: ${MQTT_TOPIC}
+      MQTT_TOPIC_CABECERA: ${MQTT_TOPIC_CABECERA}
+      MQTT_USER: ${MQTT_USER}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- API backend ---------------------------------------------------------
+  api:
+    build: ./app/backend
+    container_name: tfg_api
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- Web dashboard (sirve estaticos y hace de proxy a la API) -----------
+  web:
+    build: ./app/frontend
+    container_name: tfg_web
+    restart: unless-stopped
+    ports:
+      - "${WEB_HOST_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  db_data:
+  mosquitto_data:
+  mosquitto_log:

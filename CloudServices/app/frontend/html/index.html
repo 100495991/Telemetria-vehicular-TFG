@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telemetría Vehicular — TFG UC3M</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Leaflet (mapa) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Chart.js (graficas) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+    <!-- ============================== Cabecera ============================== -->
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-logo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 13L5 7.5C5.3 6.6 6.1 6 7 6H17C17.9 6 18.7 6.6 19 7.5L21 13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="2.5" y="13" width="19" height="6" rx="2" stroke="white" stroke-width="1.8"/><circle cx="7" cy="19" r="1.4" fill="white"/><circle cx="17" cy="19" r="1.4" fill="white"/></svg>
+            </div>
+            <div class="brand-text">
+                <div class="brand-title">Telemetría en Vivo</div>
+                <div class="brand-sub">Vehículo · TFG UC3M</div>
+            </div>
+        </div>
+
+        <nav class="nav-tabs">
+            <button class="nav-btn active" id="btn-view-dashboard" type="button">Panel</button>
+            <button class="nav-btn" id="btn-view-historial" type="button">Histórico</button>
+        </nav>
+
+        <div class="status-group">
+            <div class="badge" id="badge-gprs" title="Estado del enlace GPRS">
+                <span class="dot" id="gprs-dot"></span>
+                <span id="gprs-text">GPRS —%</span>
+            </div>
+            <div class="badge" title="Fix GPS">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 22H22L12 2Z" stroke="#3454d1" stroke-width="2" stroke-linejoin="round"/></svg>
+                <span id="gps-text">— sat · —</span>
+            </div>
+            <a class="badge badge-link" id="btn-download-csv" href="/api/trip/csv" download
+               title="Descargar CSV del viaje actual">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3V15M12 15L7 10M12 15L17 10" stroke="#3454d1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V17" stroke="#3454d1" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>CSV</span>
+            </a>
+            <div class="clock" id="clock">--:--:--</div>
+        </div>
+    </header>
+
+    <!-- ============================== Panel (dashboard) ============================== -->
+    <main class="view" id="view-dashboard">
+
+        <div class="top-grid">
+            <!-- Mapa -->
+            <section class="card map-card">
+                <div id="map"></div>
+
+                <div class="map-overlay overlay-speed">
+                    <div class="overlay-stat">
+                        <div class="overlay-label">Velocidad</div>
+                        <div class="overlay-value" id="map-speed">0.0 <span class="unit">km/h</span></div>
+                    </div>
+                    <div class="overlay-sep"></div>
+                    <div class="overlay-stat">
+                        <div class="overlay-label">Rumbo</div>
+                        <div class="overlay-value" id="map-heading">N <span class="unit">0°</span></div>
+                    </div>
+                </div>
+
+                <div class="map-overlay overlay-alt" id="map-alt">Alt. — m · HDOP — (—)</div>
+
+                <button class="map-center-btn" id="btn-center-map" type="button" title="Centrar mapa">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#3454d1" stroke-width="2"/><path d="M12 2V6M12 18V22M22 12H18M6 12H2" stroke="#3454d1" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </section>
+
+            <!-- Cuadro de mandos -->
+            <section class="card gauges-card">
+                <div class="card-title">Cuadro de mandos</div>
+                <div class="gauges-row">
+                    <div class="gauge-block">
+                        <svg class="gauge-svg" viewBox="0 0 200 130">
+                            <path class="gauge-track" id="gauge-speed-track" d=""/>
+                            <path class="gauge-value" id="gauge-speed-value" d=""/>
+                            <line class="gauge-needle" id="gauge-speed-needle" x1="100" y1="100" x2="100" y2="30"/>
+                            <circle cx="100" cy="100" r="6" class="gauge-hub"/>
+                        </svg>
+                        <div class="gauge-value-text" id="gauge-speed-text">—</div>
+                        <div class="gauge-caption">km/h (OBD)</div>
+                    </div>
+                    <div class="gauge-block">
+                        <svg class="gauge-svg" viewBox="0 0 200 130">
+                            <path class="gauge-track" id="gauge-rpm-track" d=""/>
+                            <path class="gauge-value" id="gauge-rpm-value" d=""/>
+                            <line class="gauge-needle" id="gauge-rpm-needle" x1="100" y1="100" x2="100" y2="30"/>
+                            <circle cx="100" cy="100" r="6" class="gauge-hub"/>
+                        </svg>
+                        <div class="gauge-value-text" id="gauge-rpm-text">—</div>
+                        <div class="gauge-caption">RPM</div>
+                    </div>
+                </div>
+
+                <div class="mini-tiles">
+                    <div class="mini-tile">
+                        <div class="mini-label">Carga motor</div>
+                        <div class="mini-value" id="mini-load">—</div>
+                    </div>
+                    <div class="mini-tile">
+                        <div class="mini-label">Acelerador</div>
+                        <div class="mini-value" id="mini-accel">—</div>
+                    </div>
+                    <div class="mini-tile">
+                        <div class="mini-label">Refrigerante</div>
+                        <div class="mini-value" id="mini-coolant">—</div>
+                    </div>
+                </div>
+                <div class="gauges-note" id="gauges-note">Sin datos OBD (ELM327) en esta trama</div>
+            </section>
+        </div>
+
+        <!-- Tarjetas resumen -->
+        <div class="tiles-row">
+            <div class="tile">
+                <div class="tile-label">Temp. ambiente</div>
+                <div class="tile-value" id="tile-amb">—°C</div>
+            </div>
+            <div class="tile">
+                <div class="tile-label">Temp. neumático</div>
+                <div class="tile-value" id="tile-tire">—°C</div>
+            </div>
+            <div class="tile attitude-tile">
+                <div class="attitude-ball"><div class="attitude-horizon" id="attitude-horizon"></div></div>
+                <div>
+                    <div class="tile-label">Actitud (IMU)</div>
+                    <div class="tile-sub" id="tile-attitude">Roll —° · Pitch —°</div>
+                </div>
+            </div>
+            <div class="tile">
+                <div class="tile-label">Enlace GPRS</div>
+                <div class="tile-sub" id="tile-packets">— paquetes enviados</div>
+                <div class="progress"><div class="progress-fill" id="gprs-bar" style="width:0%"></div></div>
+            </div>
+        </div>
+
+        <!-- Graficas -->
+        <div class="charts-row">
+            <section class="card chart-card">
+                <div class="chart-head">
+                    <div class="card-title">RPM &amp; Velocidad</div>
+                    <div class="legend">
+                        <span class="legend-item"><i style="background:#3454d1"></i>RPM</span>
+                        <span class="legend-item"><i style="background:#f59e0b"></i>Velocidad</span>
+                    </div>
+                </div>
+                <div class="chart-wrap"><canvas id="chart-rpm-speed"></canvas></div>
+            </section>
+            <section class="card chart-card">
+                <div class="chart-head">
+                    <div class="card-title">Temperaturas</div>
+                    <div class="legend">
+                        <span class="legend-item"><i style="background:#dc2626"></i>Refrig.</span>
+                        <span class="legend-item"><i style="background:#3454d1"></i>Ambiente</span>
+                        <span class="legend-item"><i style="background:#a855f7"></i>Neumático</span>
+                    </div>
+                </div>
+                <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- ============================== Histórico ============================== -->
+    <main class="view" id="view-historial" hidden>
+        <div class="hist-head">
+            <div class="card-title">Histórico de telemetría</div>
+            <div class="hist-count" id="hist-count">0 registros · más reciente primero</div>
+        </div>
+        <div class="table-wrap">
+            <table class="hist-table">
+                <thead>
+                <tr>
+                    <th>Hora</th>
+                    <th>Estado</th>
+                    <th class="num">Latitud</th>
+                    <th>Hem.</th>
+                    <th class="num">Longitud</th>
+                    <th>Hem.</th>
+                    <th class="num">Vel. GPS</th>
+                    <th class="num">Rumbo</th>
+                    <th class="ctr">Fix</th>
+                    <th>Fix desc.</th>
+                    <th class="num">Sat.</th>
+                    <th class="num">Alt (m)</th>
+                    <th class="num">HDOP</th>
+                    <th>HDOP cal.</th>
+                    <th class="num">Accel X</th>
+                    <th class="num">Accel Y</th>
+                    <th class="num">Accel Z</th>
+                    <th class="num">Roll</th>
+                    <th class="num">Pitch</th>
+                    <th class="num">T. IMU</th>
+                    <th class="num">T. amb.</th>
+                    <th class="num">T. neum.</th>
+                    <th class="num">RPM</th>
+                    <th class="num">Vel. OBD</th>
+                    <th class="num">Carga motor</th>
+                    <th class="num">Acel. pos.</th>
+                    <th class="num">T. refrig.</th>
+                    <th class="num">T. motor (s)</th>
+                    <th class="num">Consumo (L/h)</th>
+                    <th class="ctr">GPRS</th>
+                    <th class="num">Señal</th>
+                    <th class="num">Paquetes</th>
+                </tr>
+                </thead>
+                <tbody id="hist-body"></tbody>
+            </table>
+        </div>
+    </main>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
