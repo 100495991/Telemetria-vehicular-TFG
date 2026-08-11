@@ -7,15 +7,10 @@
 //  Asignacion de puertos serie hardware del Mega 2560
 // =====================================================
 
-//  Serial1  -> GPS NEO-6M          pines 18 (TX) / 19 (RX)
 #define SERIAL_GPS      Serial1
 #define BAUD_GPS        115200
 #define FREQ_GPS        5
 
-// PIN_SD_CS movido temporalmente de 53 a 9 para descartar que el pin 53
-// (SS por hardware del Mega) este danado -- MISO/MOSI/SCK siguen fijos en
-// 50/51/52. Si tras recablear el CS al pin 9 la SD se detecta, el problema
-// era el pin 53; si sigue igual, el problema esta en el modulo SD.
 #define PIN_SD_CS       53
 #define SD_MHZ          50
 

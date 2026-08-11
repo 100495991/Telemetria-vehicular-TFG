@@ -18,16 +18,14 @@
 // Estructura de datos del WT31N
 // -----------------------------------------------------------------------------
 struct InfoAccel {
-    // --- Aceleración lineal (g), rango ±2g ---
+    // aceleraciones
     float ax;
     float ay;
     float az;
+    // angulos
+    float roll;
+    float pitch;
 
-    // --- Ángulos de Euler (°) ---
-    float roll;    // Eje X, rango ±180°
-    float pitch;   // Eje Y, rango ±90°
-
-    // --- Temperatura del sensor (°C) ---
     float temperatura;
 
     bool  valido;

@@ -89,7 +89,7 @@ static void parsearPaquete() {
         }
 
         case 0x53: { // Angulos
-            // dos valores iniciales sumados por fallo de calibración.
+            // valores iniciales sumados por fallo de calibración.
             // roll y pitch van intercambiados respecto al datasheet por la
             // disposición física del sensor en el dispositivo: raw0 (eje X
             // del sensor) es el pitch real y raw1 (eje Y del sensor) es el
@@ -183,7 +183,7 @@ size_t escribirDatosAccel(char* dst, size_t espacio) {
 }
 
 // -----------------------------------------------------------------------------
-// Imprime toda la estructura por el monitor serie
+// Imprime toda la estructura por el monitor serie (debug)
 // -----------------------------------------------------------------------------
 void imprimirAccel() {
     Serial.println(F("┌─ INFO ACELEROMETRO ───────────────────────────┐"));

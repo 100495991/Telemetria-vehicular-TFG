@@ -35,21 +35,9 @@ InfoGPS     info_gps;
 void setupGPS() {
     SFE_UBLOX_GNSS gpsConfig;
 
-    // saveConfiguration() (mas abajo) graba el baudrate en la memoria NO
-    // volatil del NEO-6M: sobrevive a resets y a nuevas subidas de sketch.
-    // Asi que solo la PRIMERA vez el modulo esta a 9600 (de fabrica); en
-    // cualquier ejecucion posterior ya arranca directamente a 115200. Si
-    // aqui solo se probara 9600, esas veces gpsConfig.begin() fallaria,
-    // haria return, y Serial1 se quedaria a 9600 mientras el modulo habla
-    // de verdad a 115200: todo lo que llega se lee con framing incorrecto
-    // (el modulo puede tener fix perfectamente -el LED parpadea- pero
-    // TinyGPS++ nunca reconoce una trama NMEA valida). Por eso se prueba
-    // primero a 9600 y, si no contesta, se reintenta a 115200 antes de
-    // rendirse.
     SERIAL_GPS.begin(9600);
     if (gpsConfig.begin(SERIAL_GPS)) {
-        // Primer arranque (o el modulo se reseteo a fabrica): lo pasamos a
-        // 115200 y confirmamos que responde ya a esa velocidad.
+        // Primer arranque: se pasa a 115200 baud y confirma que responde ya a esa velocidad.
         gpsConfig.setSerialRate(BAUD_GPS, COM_PORT_UART1);
         SERIAL_GPS.begin(BAUD_GPS);
         delay(100);
@@ -58,8 +46,7 @@ void setupGPS() {
             return;
         }
     } else {
-        // No contesto a 9600: probablemente ya esta a 115200 de una
-        // ejecucion anterior (config guardada con saveConfiguration()).
+        // No contesto a 9600: ya esta a 115200
         SERIAL_GPS.begin(BAUD_GPS);
         delay(100);
         if (!gpsConfig.begin(SERIAL_GPS)) {
