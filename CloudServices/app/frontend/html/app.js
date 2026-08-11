@@ -6,9 +6,10 @@
      - mapa de la ruta                    /api/track
      - graficas                           /api/readings (incremental por since_id)
      - vista de historico                 /api/readings
-   Campos OBD (RPM, VEL_OBD, CARGA_MOTOR, ACEL_POS, TEMP_REFRIG) no los
-   produce todavia el firmware: si no llegan en una trama se muestran como
-   "sin datos" en vez de inventar un valor.
+   Campos OBD (obd_rpm, obd_velocidad_kmh, obd_carga_motor_pct,
+   obd_pos_acelerador_pct, obd_temp_refrigerante_c, ...): si no llegan en una
+   trama (p.ej. ELM327 sin fix aun) se muestran como "sin datos" en vez de
+   inventar un valor.
    ============================================================================= */
 
 const REFRESCO_MS = 500;       // cadencia de sondeo

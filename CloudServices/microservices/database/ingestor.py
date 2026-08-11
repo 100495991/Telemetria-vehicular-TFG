@@ -97,14 +97,15 @@ COLUMNAS = {
     "gprs_conectado":        (_a_int,   "TINYINT"),
     "gprs_rssi_pct":         (_a_int,   "INT"),
     "gprs_paquetes_enviados":(_a_int,   "BIGINT"),
-    # OBD-II (ELM327), pendiente de que el firmware las publique: se dejan ya
-    # declaradas para que la columna se cree con el tipo correcto (DOUBLE) en
-    # cuanto lleguen, en vez de caer al VARCHAR por defecto.
-    "RPM":                   (_a_float, "DOUBLE"),   # PID 0x0C, rpm
-    "VEL_OBD":               (_a_float, "DOUBLE"),   # PID 0x0D, km/h
-    "TEMP_REFRIG":           (_a_float, "DOUBLE"),   # PID 0x05, °C
-    "ACEL_POS":              (_a_float, "DOUBLE"),   # PID 0x11, %
-    "CARGA_MOTOR":           (_a_float, "DOUBLE"),   # PID 0x04, %
+    # OBD-II (ELM327): se declaran ya para que la columna se cree con el tipo
+    # correcto (DOUBLE/INT) en vez de caer al VARCHAR por defecto.
+    "obd_rpm":                   (_a_float, "DOUBLE"),   # PID 0x0C, rpm
+    "obd_velocidad_kmh":         (_a_float, "DOUBLE"),   # PID 0x0D, km/h
+    "obd_carga_motor_pct":       (_a_float, "DOUBLE"),   # PID 0x04, %
+    "obd_pos_acelerador_pct":    (_a_float, "DOUBLE"),   # PID 0x11, %
+    "obd_temp_refrigerante_c":   (_a_float, "DOUBLE"),   # PID 0x05, °C
+    "obd_tiempo_arranque_s":     (_a_int,   "INT"),       # PID 0x1F, s
+    "obd_tasa_consumo_lh":       (_a_float, "DOUBLE"),   # PID 0x5E, L/h
 }
 
 # Columnas que gestiona el sistema, no el vehiculo: nunca se crean desde la cabecera
