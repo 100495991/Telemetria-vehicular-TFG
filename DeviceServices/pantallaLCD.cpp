@@ -542,7 +542,7 @@ static void actualizarPaginaHome(bool forzar) {
         antV_tireT = vTemp;
     }
 
-    // Bola de G (depende del acelerómetro): se refresca a ACCEL_REFRESCO_MS,
+    // Circulo de friccion (depende del acelerómetro): se refresca a ACCEL_REFRESCO_MS,
     // igual que la página Dinámica, para no saturar la pantalla con el IMU.
     static unsigned long ultimoRefrescoG = 0;
     if (!forzar && millis() - ultimoRefrescoG < ACCEL_REFRESCO_MS) return;
@@ -552,7 +552,7 @@ static void actualizarPaginaHome(bool forzar) {
     // vez de irse a una posicion calculada con datos viejos/basura.
     if (!accel.valido) return;
 
-    // Bola de G: borrar posición anterior, repintar guía y dibujar la nueva
+    // Circulo de friccion: borrar posición anterior, repintar guía y dibujar la nueva
     int cx = HOME_CX1, cy = HOME_Y2 + HOME_TARJ_H / 2 + 8;
     int gx = cx - constrain((int)(accel.ax * 35), -(HOME_G_R - 6), HOME_G_R - 6);
     int gy = cy - constrain((int)(accel.ay * 35), -(HOME_G_R - 6), HOME_G_R - 6);

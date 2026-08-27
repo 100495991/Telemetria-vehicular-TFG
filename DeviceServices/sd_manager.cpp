@@ -152,14 +152,9 @@ void setupSDCard() {
 // -----------------------------------------------------------------------------
 template <typename T>
 static void logEventoImpl(T msg) {
-    // Siempre imprimir también por monitor serie
+    // Imprimir también por monitor serie
     // Serial.print(F("[LOG] "));
     // Serial.println(msg);
-
-    // Serial.print(F("[LOG-DEBUG] sdOK="));
-    // Serial.print(sdOK);
-    // Serial.print(F(" logFile-abierto="));
-    // Serial.println((bool)logFile);
 
     if (!sdOK || !logFile) return;
     // Serial.println(F("[LOG-DEBUG] paso el guard, va a tocar la SD"));

@@ -43,6 +43,7 @@ void setupTemperatureSensor() {
     Wire.setWireTimeout(25000, true);
 
     if (termometroIR.begin()) {
+        termometroIR.writeEmissivity(0.95);
         tempDisponible = true;
         logEvento(F("[TEMP] Sensor IR MLX90614 inicializado correctamente"));
     } else {
