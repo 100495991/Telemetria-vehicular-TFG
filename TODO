@@ -7,15 +7,9 @@ Cambiar GPRS en el header de la pantalla por el RSSI (0 si no hay conexion)
 
 Añadir en memoria comparacion de alternativas GPS 
 
-Memoria Mover descripcion de interfaz pantalla a otro apartado 
-Memoria Mover implementacion mapa en pantalla a otro apartado
-
 Probar a fusionar funciones actualizarGPS y leerGPS en una para
 eliminar if (gps.location.isUpdated()) {} y tener una tasa de escritura
 más alternativas
-
-Eliminar #include <SdFat.h> de accelerometer.h, gps.h, obd2.h y temperature_sensor.h 
-y comporbar que sigue funcionando
 
 Comprobar que no se usa /api/stats
 

@@ -6,7 +6,6 @@
 // =============================================================================
 
 #include <Arduino.h>
-#include <SdFat.h>
 #include <Adafruit_MLX90614.h>
 #include <Wire.h>
 

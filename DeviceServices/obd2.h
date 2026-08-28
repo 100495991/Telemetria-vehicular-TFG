@@ -6,7 +6,6 @@
 // =============================================================================
 
 #include <Arduino.h>
-#include <SdFat.h>
 #include "ELMduino.h"
 #include "config.h"
 

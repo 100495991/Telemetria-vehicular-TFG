@@ -10,7 +10,6 @@
 
 #include <Arduino.h>
 #include <TinyGPSPlus.h>
-#include <SdFat.h>
 #include <time.h>
 #include "config.h"
 
