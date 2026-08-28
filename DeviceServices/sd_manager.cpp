@@ -118,21 +118,21 @@ const char* construirLineaCSV() {
 // Inicializa la tarjeta SD y abre LOG.TXT
 // -----------------------------------------------------------------------------
 void setupSDCard() {
-    Serial.print(F("[SD] Inicializando... "));
+    // Serial.print(F("[SD] Inicializando... "));
 
     if (!sd.begin(PIN_SD_CS, SD_SCK_MHZ(SD_MHZ))) {
-        Serial.println(F("[SD] ERROR - tarjeta no detectada o no formateada en FAT32"));
+        // Serial.println(F("[SD] ERROR - tarjeta no detectada o no formateada en FAT32"));
         sd.initErrorPrint(&Serial);  // detalle: codigo de error exacto (cableado/CS/tarjeta/velocidad)
         sdOK = false;
         return;
     }
 
     sdOK = true;
-    Serial.println(F("[SD] Inicializacion correcta"));
+    // Serial.println(F("[SD] Inicializacion correcta"));
 
     logFile = sd.open("LOG.TXT", FILE_WRITE);
     if (!logFile) {
-        Serial.println(F("[SD] ADVERTENCIA - No se pudo abrir LOG.TXT"));
+        // Serial.println(F("[SD] ADVERTENCIA - No se pudo abrir LOG.TXT"));
     }
 
     logEvento(F("=== SISTEMA INICIADO ==="));
@@ -152,9 +152,9 @@ void setupSDCard() {
 // -----------------------------------------------------------------------------
 template <typename T>
 static void logEventoImpl(T msg) {
-    // Imprimir también por monitor serie
-    Serial.print(F("[LOG] "));
-    Serial.println(msg);
+    // Imprimir también por monitor serie - Comentar si se utiliza el OBD2
+    // Serial.print(F("[LOG] "));
+    // Serial.println(msg);
 
     if (!sdOK || !logFile) return;
     // Serial.println(F("[LOG-DEBUG] paso el guard, va a tocar la SD"));
@@ -179,9 +179,12 @@ void logEvento(const __FlashStringHelper* msg) { logEventoImpl(msg); }
 void crearFicheroCSV() {
     if (!sdOK || dataFileOpen) return;
  
-    // Nombre único: YYYYMMDDHHMMSS.csv, derivado de timestamp_iso quitando '-', 'T' y ':'
+    // Nombre único: YYYYMMDDHHMMSS.csv, derivado de timestamp_iso quitando '-', 'T' y ':'.
+    // Se corta en el '.' de los milisegundos (timestamp_iso trae ".mmm"): el
+    // nombre no necesita esa resolucion, con segundos ya es unico de sobra.
     uint8_t pos = 0;
     for (const char *c = info_gps.timestamp_iso; *c != '\0' && pos < sizeof(dataFileName) - 5; c++) {
+        if (*c == '.') break;
         if (*c != '-' && *c != 'T' && *c != ':') {
             dataFileName[pos++] = *c;
         }
@@ -200,7 +203,6 @@ void crearFicheroCSV() {
     dataFile = sd.open(dataFileName, FILE_WRITE);
     if (!dataFile) {
         logEvento(F("[SD] ERROR - No se pudo crear el fichero CSV"));
-        Serial.println(F("[DEBUG] Verificar: ¿Espacio disponible? ¿Permisos? ¿Módulo SD responsivo?"));
         return;
     }
  
@@ -209,8 +211,22 @@ void crearFicheroCSV() {
     // construirCabeceraCSV() y aqui solo se vuelca.
     dataFile.println(construirCabeceraCSV());
     dataFile.flush();
+
+    // Cerrar y reabrir en modo append: crear una entrada de directorio nueva
+    // es la operacion mas fragil ante un corte de luz/reset (a diferencia de
+    // LOG.TXT, que ya existia de sesiones anteriores). Este close() unico
+    // consolida esa entrada nueva en la tarjeta; a partir de aqui cada
+    // escribirLineaCSV() solo AMPLIA un fichero ya existente, igual que
+    // LOG.TXT, que si sobrevive a un corte abrupto.
+    dataFile.close();
+    dataFile = sd.open(dataFileName, FILE_WRITE);
+    if (!dataFile) {
+        logEvento(F("[SD] ERROR - No se pudo reabrir el fichero CSV tras la cabecera"));
+        return;
+    }
+
     dataFileOpen = true;
- 
+
     // Reutilizamos el mismo buffer 'msg' declarado arriba
     snprintf(msg, sizeof(msg), "[SD] Fichero creado: %s", dataFileName);
     logEvento(msg);
@@ -251,5 +267,5 @@ void cerrarSD() {
         logFile.close();
     }
     dataFileOpen = false;
-    Serial.println(F("[SD] Ficheros cerrados correctamente"));
+    // Serial.println(F("[SD] Ficheros cerrados correctamente"));
 }

@@ -104,22 +104,23 @@ static bool sondaRapidaELM327() {
 }
 
 // -----------------------------------------------------------------------------
-// Inicializa el puerto serie y la conexion con el ELM327
+// Intenta (re)conectar con el ELM327: sondeo rapido + handshake de ELMduino.
+// Usada tanto en el arranque (setupObd2) como en los reintentos periodicos
+// desde leerObd2() cuando el adaptador no estaba disponible. Dos llamadas
+// bloqueantes cortas (~300 ms de sondeo + hasta 2 s de handshake si hay algo
+// al otro lado), por eso quien la llama debe espaciar los intentos en el
+// tiempo en vez de invocarla en cada vuelta del loop().
 // -----------------------------------------------------------------------------
-void setupObd2() {
-    inicializarInfoObd2();
-
-    SERIAL_OBD.begin(BAUD_OBD);
-
+static bool intentarConectarObd2() {
     logEvento(F("[OBD2] Conectando con el ELM327..."));
 
     // Sondeo rapido (unos 300 ms como mucho): si no hay ni un adaptador
     // conectado a SERIAL_OBD, no tiene sentido esperar el handshake completo
     // de myELM327.begin(), que en el peor caso (protocolo AUTO + vehiculo sin
-    // responder) puede bloquear el arranque mas de 30 s.
+    // responder) puede bloquear varios segundos.
     if (!sondaRapidaELM327()) {
-        logEvento(F("[OBD2] AVISO - ELM327 no responde por serie, modulo OBD2 desactivado"));
-        return;
+        logEvento(F("[OBD2] AVISO - ELM327 no responde por serie, se reintentara mas adelante"));
+        return false;
     }
 
     // Vaciar lo que haya contestado el ATI del sondeo: myELM327.begin() manda
@@ -128,19 +129,31 @@ void setupObd2() {
     delay(20);
     while (SERIAL_OBD.available()) SERIAL_OBD.read();
 
-    obd2Disponible = myELM327.begin(SERIAL_OBD, false, 2000);
+    bool conectado = myELM327.begin(SERIAL_OBD, false, 2000);
 
-    if (!obd2Disponible) {
+    if (!conectado) {
         // Comprobar si el ELM327 esta presente pero no responde al protocolo OBD-II
         if (myELM327.nb_rx_state == ELM_UNABLE_TO_CONNECT) {
-            logEvento(F("[OBD2] AVISO - ELM327 detectado pero sin conexion con el vehiculo, modulo OBD2 desactivado"));
+            logEvento(F("[OBD2] AVISO - ELM327 detectado pero sin conexion con el vehiculo, se reintentara mas adelante"));
         } else {
-            logEvento(F("[OBD2] AVISO - ELM327 no responde por serie, modulo OBD2 desactivado"));
+            logEvento(F("[OBD2] AVISO - ELM327 no responde por serie, se reintentara mas adelante"));
         }
-        return;
+        return false;
     }
 
     logEvento(F("[OBD2] ELM327 conectado correctamente"));
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// Inicializa el puerto serie y hace el primer intento de conexion con el ELM327
+// -----------------------------------------------------------------------------
+void setupObd2() {
+    inicializarInfoObd2();
+
+    SERIAL_OBD.begin(BAUD_OBD);
+
+    obd2Disponible = intentarConectarObd2();
 }
 
 // -----------------------------------------------------------------------------
@@ -166,14 +179,38 @@ static void registrarExito() {
     info_obd2.valido   = true;
 }
 
+// Cada cuanto se reintenta la conexion mientras el ELM327 no este disponible.
+// intentarConectarObd2() es bloqueante (hasta ~2.3 s si no hay nada al otro
+// lado), por eso no se prueba en cada vuelta del loop() sino cada pocos
+// segundos: da margen a que aparezca el adaptador o el vehiculo se encienda
+// sin congelar el resto de modulos (GPS, pantalla...) mientras tanto.
+static const unsigned long INTERVALO_REINTENTO_MS = 5000;
+static unsigned long ultimoIntentoReconexion = 0;
+
 // -----------------------------------------------------------------------------
 // Debe llamarse en cada iteración del loop().
 // Consulta un PID por vuelta y avanza al siguiente cuando el actual responde
 // (con exito o con error): nunca se lanza una query nueva antes de que la
 // anterior haya terminado.
+// Si el ELM327 no estaba disponible (fallo en el setup o desconexion previa),
+// reintenta la conexion cada INTERVALO_REINTENTO_MS en vez de dejarlo
+// desactivado para siempre.
 // -----------------------------------------------------------------------------
 void leerObd2() {
-    if (!obd2Disponible) return;
+    if (!obd2Disponible) {
+        if (millis() - ultimoIntentoReconexion < INTERVALO_REINTENTO_MS) return;
+        ultimoIntentoReconexion = millis();
+
+        obd2Disponible = intentarConectarObd2();
+        if (obd2Disponible) {
+            // Arranca limpio: maquina de estados desde el primer PID y
+            // contador de fallos a cero, para no arrastrar fallos de antes
+            // de que el adaptador estuviera disponible.
+            estadoObd2 = OBD_RPM;
+            fallosConsecutivos = 0;
+        }
+        return;
+    }
 
     switch (estadoObd2) {
 

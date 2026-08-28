@@ -1,5 +1,6 @@
 #include "pantallaLCD.h"
 #include <TouchScreen.h>
+#include <math.h>
 #include "gps.h"
 #include "accelerometer.h"
 #include "temperature_sensor.h"
@@ -213,6 +214,10 @@ static void gestionarTouch();
 // ID real con el sketch de diagnóstico de MCUFRIEND_kbv.
 #define TFT_TEST_BARRAS_RGB  0
 
+// Ciclo automático de páginas: cada CICLO_PAGINAS_MS se pasa a la siguiente
+// pestaña (orden de Pagina, con vuelta a PAG_HOME tras la última).
+#define CICLO_PAGINAS_MS 10000UL
+
 void setupPantalla() {
     uint16_t ID = tft.readID();
     char bufID[32];
@@ -241,6 +246,14 @@ void setupPantalla() {
 
 void actualizarPantalla() {
     gestionarTouch();
+
+    static unsigned long ultimoCambioPagina = 0;
+    if (millis() - ultimoCambioPagina >= CICLO_PAGINAS_MS) {
+        ultimoCambioPagina = millis();
+        Pagina siguiente = (Pagina)((paginaActual + 1) % 5);
+        cambiarPagina(siguiente);
+    }
+
     switch (paginaActual) {
         case PAG_HOME:  actualizarPaginaHome(false);     break;
         case PAG_GPS:   actualizarPaginaGPS(false);      break;
@@ -256,47 +269,82 @@ void actualizarPantalla() {
 // =============================================================================
 static void dibujarCabeceraEstatica() {
     tft.drawFastHLine(0, CABECERA_ALTO - 1, PANT_ANCHO, COLOR_BORDE);
-}
 
-static void actualizarCabecera() {
-    actualizarTestigoVida();
-
-    // Repinta como mucho una vez por segundo (evita parpadeo/coste innecesario).
-    // OJO: antes este throttle miraba info_gps.segundo en vez de millis(), pero
-    // info_gps.segundo solo se actualiza cuando actualizarGPS() se ejecuta, y
-    // eso en el .ino esta condicionado a gps.location.isUpdated() -- que solo
-    // se pone a true si hay fix. Sin fix (o antes del primer fix) segundo se
-    // quedaba congelado, el throttle no volvia a disparar nunca, y TODA la
-    // cabecera (hora, satelites y el estado GPRS) se quedaba pintada con lo
-    // ultimo que hubiera, aunque el GPRS ya estuviera conectado.
-    static unsigned long ultimoRepintado = 0;
-    if (millis() - ultimoRepintado < 1000) return;
-    ultimoRepintado = millis();
-
-    tft.fillRect(20, 3, PANT_ANCHO - 40, CABECERA_ALTO - 6, COLOR_FONDO);
-
-    // Fecha y hora grandes, centradas
-    char buf[24];
-    snprintf(buf, sizeof(buf), "%02d/%02d/%04d  %02d:%02d:%02d",
-             info_gps.dia, info_gps.mes, info_gps.anyo,
-             info_gps.hora, info_gps.minuto, info_gps.segundo);
-    tft.setTextColor(COLOR_TEXTO_PRIN);
-    tft.setTextSize(2);
-    tft.setCursor(100, 9);
-    tft.print(buf);
+    // Etiqueta fija: no depende de ningun dato, se pinta una sola vez aqui
+    // en vez de en cada actualizarCabecera().
     tft.setTextSize(1);
     tft.setCursor(346, 16);
     tft.setTextColor(COLOR_TEXTO_SEC);
     tft.print("Espana");
+}
 
-    // Satélites y GPRS a la derecha
-    tft.setCursor(392, 13);
-    tft.setTextColor(info_gps.n_satelites_en_uso >= 5 ? COLOR_OK : COLOR_ALERTA);
-    tft.print(info_gps.n_satelites_en_uso); tft.print(" sat");
+// Repinta cada campo de la cabecera solo si su valor (o su validez) cambio
+// desde el ultimo pintado, igual que el resto de paginas (ver
+// actualizarCampoFloat). Sin esto, la cabecera entera se repintaba cada
+// segundo aunque no hubiera fix GPS ni nada nuevo que mostrar.
+static void actualizarCabecera() {
+    actualizarTestigoVida();
 
-    tft.setCursor(444, 13);
-    tft.setTextColor(infoGPRS.estado ? COLOR_OK : COLOR_ALERTA);
-    tft.print(infoGPRS.estado ? "GPRS" : "----");
+    static bool primerPintado = true;
+
+    // --- Fecha y hora: se cuelgan de info_gps.valido, igual que el resto de
+    // campos GPS de la pantalla -> sin fix, se muestra "--" en vez de la
+    // ultima hora conocida.
+    static bool antValidoFecha = false;
+    static int  ant_dia = -1, ant_mes = -1, ant_anyo = -1;
+    static int  ant_hora = -1, ant_minuto = -1, ant_segundo = -1;
+
+    bool valido = info_gps.valido;
+    bool cambioValidezFecha = (valido != antValidoFecha);
+    bool cambioFecha = valido && (info_gps.dia != ant_dia || info_gps.mes != ant_mes ||
+                                   info_gps.anyo != ant_anyo || info_gps.hora != ant_hora ||
+                                   info_gps.minuto != ant_minuto || info_gps.segundo != ant_segundo);
+
+    if (primerPintado || cambioValidezFecha || cambioFecha) {
+        tft.fillRect(100, 9, 230, 16, COLOR_FONDO);
+        tft.setTextSize(2);
+        tft.setCursor(100, 9);
+        if (valido) {
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%02d/%02d/%04d  %02d:%02d:%02d",
+                     info_gps.dia, info_gps.mes, info_gps.anyo,
+                     info_gps.hora, info_gps.minuto, info_gps.segundo);
+            tft.setTextColor(COLOR_TEXTO_PRIN);
+            tft.print(buf);
+        } else {
+            tft.setTextColor(COLOR_TEXTO_SEC);
+            tft.print("--/--/----  --:--:--");
+        }
+        ant_dia = info_gps.dia; ant_mes = info_gps.mes; ant_anyo = info_gps.anyo;
+        ant_hora = info_gps.hora; ant_minuto = info_gps.minuto; ant_segundo = info_gps.segundo;
+        antValidoFecha = valido;
+    }
+
+    // --- Satelites: n_satelites_en_uso se actualiza en cuanto la trama GSA/GGA
+    // trae ese dato, independientemente de si hay fix de posicion, asi que se
+    // compara solo, sin colgarlo de info_gps.valido.
+    static int ant_sat = -1;
+    if (primerPintado || info_gps.n_satelites_en_uso != ant_sat) {
+        tft.fillRect(392, 13, 50, 10, COLOR_FONDO);
+        tft.setTextSize(1);
+        tft.setCursor(392, 13);
+        tft.setTextColor(info_gps.n_satelites_en_uso >= 5 ? COLOR_OK : COLOR_ALERTA);
+        tft.print(info_gps.n_satelites_en_uso); tft.print(" sat");
+        ant_sat = info_gps.n_satelites_en_uso;
+    }
+
+    // --- Estado GPRS ---
+    static bool antEstadoGPRS = false;
+    if (primerPintado || infoGPRS.estado != antEstadoGPRS) {
+        tft.fillRect(444, 13, 36, 10, COLOR_FONDO);
+        tft.setTextSize(1);
+        tft.setCursor(444, 13);
+        tft.setTextColor(infoGPRS.estado ? COLOR_OK : COLOR_ALERTA);
+        tft.print(infoGPRS.estado ? "GPRS" : "----");
+        antEstadoGPRS = infoGPRS.estado;
+    }
+
+    primerPintado = false;
 }
 
 // ---- Testigo de vida: punto parpadeante en la esquina ----
@@ -474,7 +522,9 @@ static void dibujarEstructuraPagina(Pagina p) {
 #define HOME_Y2 (HOME_Y1 + HOME_TARJ_H + 8)
 #define HOME_CX1 (HOME_X1 + HOME_TARJ_W / 2)
 #define HOME_CX2 (HOME_X2 + HOME_TARJ_W / 2)
-#define HOME_G_R 40  // radio del círculo guía de la bola de G
+#define HOME_G_R      40    // radio del círculo guía de la bola de G
+#define HOME_G_ESCALA 35.0f // px por g, acoplado a HOME_G_R (radio ~= 1 g)
+#define HOME_G_FILTRO 0.3f  // suavizado exponencial: alisa ruido del IMU/vibraciones sin retardo perceptible
 
 static void dibujarGuiaBolaG() {
     int cx = HOME_CX1, cy = HOME_Y2 + HOME_TARJ_H / 2 + 8;
@@ -495,6 +545,7 @@ static void actualizarPaginaHome(bool forzar) {
     static float ant_vel = -1, ant_rpm = -1, ant_tireT = -1;
     static bool  antV_vel = false, antV_rpm = false, antV_tireT = false;
     static int   gx_ant = -1, gy_ant = -1;
+    static float sx = 0, sy = 0; // estado del filtro exponencial de la bola de G
 
     char buf[12];
 
@@ -505,6 +556,7 @@ static void actualizarPaginaHome(bool forzar) {
         // false, ver el comentario equivalente en actualizarPaginaGPS().
         antV_vel = !vVel; antV_rpm = !vRpm; antV_tireT = !vTemp;
         gx_ant = gy_ant = -1;
+        sx = sy = 0;
     }
 
     if ((vVel != antV_vel) || (vVel && abs(info_gps.velocidad_kmh - ant_vel) >= 0.5)) {
@@ -544,23 +596,48 @@ static void actualizarPaginaHome(bool forzar) {
 
     // Circulo de friccion (depende del acelerómetro): se refresca a ACCEL_REFRESCO_MS,
     // igual que la página Dinámica, para no saturar la pantalla con el IMU.
+    // Envuelto en 'if' (no 'return') para no cortar el resto de la función si
+    // en el futuro se añade más pintado después de este bloque.
     static unsigned long ultimoRefrescoG = 0;
-    if (!forzar && millis() - ultimoRefrescoG < ACCEL_REFRESCO_MS) return;
-    ultimoRefrescoG = millis(); 
+    if (forzar || millis() - ultimoRefrescoG >= ACCEL_REFRESCO_MS) {
+        ultimoRefrescoG = millis();
 
-    // Sin lectura valida del IMU, la bola se queda congelada donde estaba en
-    // vez de irse a una posicion calculada con datos viejos/basura.
-    if (!accel.valido) return;
+        // Sin lectura valida del IMU, la bola se queda congelada donde estaba
+        // en vez de irse a una posicion calculada con datos viejos/basura.
+        if (accel.valido) {
+            // ax = longitudinal (adelante/atrás) -> eje VERTICAL de pantalla
+            // ay = lateral (izquierda/derecha)    -> eje HORIZONTAL de pantalla
+            float px = accel.ay * HOME_G_ESCALA;
+            float py = accel.ax * HOME_G_ESCALA;
 
-    // Circulo de friccion: borrar posición anterior, repintar guía y dibujar la nueva
-    int cx = HOME_CX1, cy = HOME_Y2 + HOME_TARJ_H / 2 + 8;
-    int gx = cx - constrain((int)(accel.ax * 35), -(HOME_G_R - 6), HOME_G_R - 6);
-    int gy = cy - constrain((int)(accel.ay * 35), -(HOME_G_R - 6), HOME_G_R - 6);
-    if (gx != gx_ant || gy != gy_ant) {
-        if (gx_ant != -1) tft.fillCircle(gx_ant, gy_ant, 4, COLOR_PANEL);
-        dibujarGuiaBolaG(); // restaura la guía que el borrado pueda haber tapado
-        tft.fillCircle(gx, gy, 4, COLOR_AMBAR);
-        gx_ant = gx; gy_ant = gy;
+            // Filtro exponencial: sin el, la bola tiembla con el ruido del
+            // IMU y las vibraciones del coche.
+            sx += HOME_G_FILTRO * (px - sx);
+            sy += HOME_G_FILTRO * (py - sy);
+
+            // Recorta el MODULO del vector, no cada eje por separado: si se
+            // recorta cada eje independientemente la bola queda confinada a
+            // un cuadrado, no a un círculo, y en una frenada con giro
+            // simultáneo se va a una esquina, fuera del círculo dibujado.
+            const int RMAX = HOME_G_R - 6;
+            float m = sqrtf(sx * sx + sy * sy);
+            float px_clip = sx, py_clip = sy;
+            if (m > RMAX) {
+                px_clip = sx * RMAX / m;
+                py_clip = sy * RMAX / m;
+            }
+
+            int cx = HOME_CX1, cy = HOME_Y2 + HOME_TARJ_H / 2 + 8;
+            int gx = cx - (int)px_clip;
+            int gy = cy - (int)py_clip; // acelerar (ax > 0) sube la bola: Y de pantalla crece hacia abajo
+
+            if (gx != gx_ant || gy != gy_ant) {
+                if (gx_ant != -1) tft.fillCircle(gx_ant, gy_ant, 4, COLOR_PANEL);
+                dibujarGuiaBolaG(); // restaura la guía que el borrado pueda haber tapado
+                tft.fillCircle(gx, gy, 4, COLOR_AMBAR);
+                gx_ant = gx; gy_ant = gy;
+            }
+        }
     }
 }
 

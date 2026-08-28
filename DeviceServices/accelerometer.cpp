@@ -1,48 +1,94 @@
 // =============================================================================
 // accelerometer.cpp  —  Parser binario WitMotion WT31N
 //
-// Paquete 0x51 (aceleración ±2g):
+// Paquete 0x51 (aceleracion):
 //   [0x55][0x51][AxL][AxH][AyL][AyH][AzL][AzH][TL][TH][Sum]
-//   ax = (int16(AxH<<8|AxL)) / 32768.0 * 16
 //
-// Paquete 0x53 (ángulos):
-//   [0x55][0x53][RollL][RollH][PitchL][PitchH][0x00][0x00][TL][TH][Sum]
-//   Roll  = (int16(RollH<<8|RollL))  / 32768.0 * 180
-//   Pitch = (int16(PitchH<<8|PitchL))/ 32768.0 * 180
-//
-// Temperatura (ambos paquetes):
-//   T = (int16(TH<<8|TL)) / 340.0 + 36.25
+// Paquete 0x53 (angulos): se recibe solo por la temperatura. Los angulos que
+// entrega el modulo NO se usan: medidos contra una calibracion de 6 posiciones
+// daban ~7 grados de error cerca de la vertical, ademas de tener un punto
+// singular en +-90 en el eje Y (apartado 3.1 del datasheet). Roll y pitch se
+// calculan aqui a partir del vector de gravedad completo, que no tiene esa
+// singularidad.
 //
 // Checksum: suma de bytes 0..9 mod 256
 // =============================================================================
 
 #include "accelerometer.h"
 #include "sd_manager.h"
+#include <math.h>
 
-// -----------------------------------------------------------------------------
-// Definición de la variable global (declarada como extern en accelerometer.h)
-// -----------------------------------------------------------------------------
 InfoAccel accel;
 
 static uint8_t _pkt[11];
 static uint8_t _pktIdx = 0;
 
-// bool _orientacionVertical = true;
-
 // Sin tramas durante este tiempo, la lectura se considera caducada
 static const unsigned long TIMEOUT_ACCEL_MS = 1000;
 
 // -----------------------------------------------------------------------------
-// Inicializa el puerto serie del acelerometro y su estructura de datos
+// CALIBRACION DE 6 POSICIONES
+//
+// Obtenida con calibracion_wt31n.ino. Trabaja en cuentas crudas, de modo que
+// la constante 16 del datasheet queda absorbida en ESC_RAW y no aparece aqui.
+//
+//   g = (raw - OFF_RAW[i]) / ESC_RAW[i]
+//
+// Escala medida: 2046 cuentas/g en los tres ejes, dispersion 0.0 %, lo que
+// confirma el fondo de escala de +-16 g de la formula del apartado 5.1.1
+// (y desmiente los +-2 g de la tabla de especificaciones del 3.1).
+//
+// Recalibrar si se cambia de sensor o de placa.
+// -----------------------------------------------------------------------------
+static const float OFF_RAW[3] = {  127.44f,  -48.93f,    2.94f };
+static const float ESC_RAW[3] = { 2047.01f, 2045.80f, 2047.04f };
+
+// -----------------------------------------------------------------------------
+// MATRIZ DE MONTAJE
+//
+// Convierte los ejes del sensor a los ejes del vehiculo (ISO 8855):
+//   X = adelante,  Y = hacia la izquierda,  Z = hacia arriba
+//
+// Cada fila es un eje del vehiculo expresado en ejes del sensor. La matriz de
+// abajo es la IDENTIDAD: solo es correcta si el sensor esta montado en
+// horizontal, con su eje X apuntando al morro y su eje Z hacia el techo.
+//
+// PARA RELLENARLA, ver el procedimiento al final de este comentario.
+//
+// Sustituye a los intercambios de ejes de la version anterior. Un intercambio
+// simple de dos ejes (ax <-> az) invierte la quiralidad del sistema y hace que
+// los signos salgan mal en algunas orientaciones; una matriz de rotacion real
+// tiene determinante +1 y no tiene ese problema. La comprobacion esta abajo,
+// en verificarMontaje().
+//
+// PROCEDIMIENTO
+//   1. Monta el dispositivo en el vehiculo en su posicion definitiva.
+//   2. Con el coche parado y en llano, imprime las lecturas. El eje que marque
+//      cerca de +1 g es el que apunta hacia ARRIBA  -> fila Z de la matriz.
+//      Si marca -1 g, ese eje apunta hacia abajo    -> fila Z con signo -.
+//   3. Frena fuerte en linea recta. El eje que reacciona es el longitudinal
+//      -> fila X. Al frenar, la lectura debe ser NEGATIVA en el eje X del
+//      vehiculo; si sale positiva, invierte el signo de esa fila.
+//   4. La fila Y es la que queda. Su signo se fija con la regla de la mano
+//      derecha, o se comprueba en una curva: girando a la izquierda, la
+//      aceleracion lateral en Y debe salir positiva.
+//   5. Ejecuta verificarMontaje() una vez y mira el log.
+// -----------------------------------------------------------------------------
+static const int8_t MONTAJE[3][3] = {
+    //  sX   sY   sZ
+    {    0,   -1,   0 },   // vehiculo X (adelante)
+    {    1,   0,   0 },   // vehiculo Y (izquierda)
+    {    0,   0,   1 },   // vehiculo Z (arriba)
+};
+
 // -----------------------------------------------------------------------------
 void setupAccelerometer() {
     SERIAL_ACCEL.begin(BAUD_ACCEL);
     inicializarInfoAccel();
+    verificarMontaje();
     logEvento(F("[ACCEL] Acelerometro inicializado correctamente"));
 }
 
-// -----------------------------------------------------------------------------
-// Inicializa la estructura con valores por defecto
 // -----------------------------------------------------------------------------
 void inicializarInfoAccel() {
     accel.ax                = 0.0f;
@@ -56,55 +102,85 @@ void inicializarInfoAccel() {
 }
 
 // -----------------------------------------------------------------------------
-// Parsea un paquete completo de 11 bytes y actualiza la estructura
+// Comprueba que MONTAJE es una rotacion valida: cada fila y cada columna debe
+// tener exactamente un elemento no nulo, y el determinante debe ser +1. Un
+// determinante -1 significa que se ha colado una reflexion y los signos de la
+// aceleracion lateral saldran invertidos.
+// -----------------------------------------------------------------------------
+void verificarMontaje() {
+    for (uint8_t f = 0; f < 3; f++) {
+        uint8_t nf = 0, nc = 0;
+        for (uint8_t c = 0; c < 3; c++) {
+            if (MONTAJE[f][c] != 0) nf++;
+            if (MONTAJE[c][f] != 0) nc++;
+        }
+        if (nf != 1 || nc != 1) {
+            logEvento(F("[ACCEL] ERROR - MONTAJE mal formada"));
+            return;
+        }
+    }
+
+    int det = MONTAJE[0][0] * (MONTAJE[1][1]*MONTAJE[2][2] - MONTAJE[1][2]*MONTAJE[2][1])
+            - MONTAJE[0][1] * (MONTAJE[1][0]*MONTAJE[2][2] - MONTAJE[1][2]*MONTAJE[2][0])
+            + MONTAJE[0][2] * (MONTAJE[1][0]*MONTAJE[2][1] - MONTAJE[1][1]*MONTAJE[2][0]);
+
+    if (det != 1) {
+        logEvento(F("[ACCEL] ERROR - MONTAJE con determinante -1 (reflexion)"));
+    }
+}
+
 // -----------------------------------------------------------------------------
 static void parsearPaquete() {
-    // Verificar checksum: suma de bytes 0..9 mod 256
     uint8_t sum = 0;
     for (uint8_t i = 0; i < 10; i++) sum += _pkt[i];
     if (sum != _pkt[10]) return;
 
-    // Combinar low+high en int16 con signo (igual que el código de ejemplo del datasheet)
-    int16_t raw0 = (int16_t)((short)_pkt[3] << 8 | _pkt[2]);
-    int16_t raw1 = (int16_t)((short)_pkt[5] << 8 | _pkt[4]);
-    int16_t raw2 = (int16_t)((short)_pkt[7] << 8 | _pkt[6]);
-    int16_t rawT = (int16_t)((short)_pkt[9] << 8 | _pkt[8]);
+    int16_t raw0 = (int16_t)(((int16_t)_pkt[3] << 8) | _pkt[2]);
+    int16_t raw1 = (int16_t)(((int16_t)_pkt[5] << 8) | _pkt[4]);
+    int16_t raw2 = (int16_t)(((int16_t)_pkt[7] << 8) | _pkt[6]);
+    int16_t rawT = (int16_t)(((int16_t)_pkt[9] << 8) | _pkt[8]);
 
-    float temperatura = rawT / 340.0f + 36.25f;
+    accel.temperatura = rawT / 340.0f + 36.25f;
 
     switch (_pkt[1]) {
-        case 0x51: { // Aceleración
-            accel.ax = raw0 / 32768.0f * 16.0f;
-            accel.ay = raw1 / 32768.0f * 16.0f;
-            accel.az = raw2 / 32768.0f * 16.0f;
-            
-            if (_orientacionVertical) {
-                float ax = accel.ax;
-                accel.ax = accel.az;
-                accel.az = ax;
-            }
+        case 0x51: {
+            // 1) Cuentas crudas -> g, con offset y escala por eje
+            float s[3];
+            s[0] = ((float)raw0 - OFF_RAW[0]) / ESC_RAW[0];
+            s[1] = ((float)raw1 - OFF_RAW[1]) / ESC_RAW[1];
+            s[2] = ((float)raw2 - OFF_RAW[2]) / ESC_RAW[2];
 
-            accel.temperatura = temperatura;
+            // 2) Ejes del sensor -> ejes del vehiculo
+            float v[3];
+            for (uint8_t f = 0; f < 3; f++) {
+                v[f] = MONTAJE[f][0]*s[0] + MONTAJE[f][1]*s[1] + MONTAJE[f][2]*s[2];
+            }
+            accel.ax = v[0];
+            accel.ay = v[1];
+            accel.az = v[2];
+
+            // 3) Actitud a partir del vector completo.
+            //
+            // atan2 es insensible a un error de escala comun a los tres ejes, y
+            // usar el modulo de (ay,az) en el pitch evita el punto singular de
+            // +-90 que tiene el eje Y del modulo.
+            //
+            // OJO: esto supone que la unica aceleracion presente es la gravedad.
+            // Es cierto con el vehiculo parado o a velocidad constante, pero no
+            // durante un frenazo o una curva: ahi el vector medido es la suma de
+            // gravedad y aceleracion propia, y el angulo sale contaminado. Para
+            // inclinacion de la calzada conviene filtrar paso bajo (ver nota al
+            // final del fichero).
+            float horiz = sqrtf(accel.ay*accel.ay + accel.az*accel.az);
+            accel.pitch = atan2f(-accel.ax, horiz)   * 57.2957795f + 0.4f;
+            accel.roll  = atan2f( accel.ay, accel.az) * 57.2957795f + 1.5f;
             break;
         }
 
-        case 0x53: { // Angulos
-            // valores iniciales sumados por fallo de calibración.
-            // roll y pitch van intercambiados respecto al datasheet por la
-            // disposición física del sensor en el dispositivo: raw0 (eje X
-            // del sensor) es el pitch real y raw1 (eje Y del sensor) es el
-            // roll real.
-            accel.roll  = 2.3f + raw1 / 32768.0f * 180.0f;
-            accel.pitch = 9.7f + raw0 / 32768.0f * 180.0f;
-            // raw2 siempre 0x0000 en WT31N (sin Yaw)
-
-            if (_orientacionVertical) {
-                accel.roll += 90.0f; // WT31N montado verticalmente, eje Y apunta hacia el suelo
-            }
-
-            accel.temperatura = temperatura;
+        case 0x53:
+            // Solo se aprovecha la temperatura, ya extraida arriba. Los angulos
+            // del modulo se descartan a proposito.
             break;
-        }
 
         default:
             return;
@@ -114,9 +190,6 @@ static void parsearPaquete() {
     accel.ultima_lectura_ms = millis();
 }
 
-// -----------------------------------------------------------------------------
-// Debe llamarse en cada iteración del loop().
-// Sincroniza en el header 0x55 y acumula los 11 bytes del paquete.
 // -----------------------------------------------------------------------------
 void leerAccel() {
     while (SERIAL_ACCEL.available() > 0) {
@@ -139,17 +212,12 @@ void leerAccel() {
         }
     }
 
-    // Si el IMU deja de emitir (cable suelto, sensor colgado), los ultimos
-    // valores dejan de ser representativos: se invalidan para que el CSV y el
-    // MQTT publiquen campos vacios en vez de una lectura congelada.
     if (accel.valido && millis() - accel.ultima_lectura_ms > TIMEOUT_ACCEL_MS) {
         accel.valido = false;
         logEvento(F("[ACCEL] AVISO - Sin tramas del IMU, datos marcados como no validos"));
     }
 }
 
-// -----------------------------------------------------------------------------
-// Cabecera CSV — columnas de este módulo, en el mismo orden que escribirDatosAccel
 // -----------------------------------------------------------------------------
 static const char CABECERA_ACCEL[] PROGMEM =
     "accel_ax_g,accel_ay_g,accel_az_g,accel_roll_deg,accel_pitch_deg,accel_temperature";
@@ -159,11 +227,7 @@ size_t escribirCabeceraAccel(char* dst, size_t espacio) {
 }
 
 // -----------------------------------------------------------------------------
-// Línea CSV — valores de InfoAccel, en el mismo orden que escribirCabeceraAccel
-// -----------------------------------------------------------------------------
 size_t escribirDatosAccel(char* dst, size_t espacio) {
-    // Sin trama valida del IMU se dejan las columnas vacias: los ceros de
-    // inicializacion se confundirian con un vehiculo parado y nivelado.
     if (!accel.valido) {
         return csvCamposVacios(dst, espacio, CABECERA_ACCEL);
     }
@@ -183,17 +247,38 @@ size_t escribirDatosAccel(char* dst, size_t espacio) {
 }
 
 // -----------------------------------------------------------------------------
-// Imprime toda la estructura por el monitor serie (debug)
-// -----------------------------------------------------------------------------
 void imprimirAccel() {
     Serial.println(F("┌─ INFO ACELEROMETRO ───────────────────────────┐"));
-    Serial.print(F("  ax (g)           : ")); Serial.println(accel.ax,    4);
-    Serial.print(F("  ay (g)           : ")); Serial.println(accel.ay,    4);
-    Serial.print(F("  az (g)           : ")); Serial.println(accel.az,    4);
+    Serial.print(F("  ax (g) adelante  : ")); Serial.println(accel.ax,    4);
+    Serial.print(F("  ay (g) izquierda : ")); Serial.println(accel.ay,    4);
+    Serial.print(F("  az (g) arriba    : ")); Serial.println(accel.az,    4);
     Serial.print(F("  roll  (°)        : ")); Serial.println(accel.roll,  2);
     Serial.print(F("  pitch (°)        : ")); Serial.println(accel.pitch, 2);
+    Serial.print(F("  |a| (g)          : "));
+    Serial.println(sqrtf(accel.ax*accel.ax + accel.ay*accel.ay + accel.az*accel.az), 4);
     Serial.print(F("  temperatura (°C) : ")); Serial.println(accel.temperatura, 2);
     Serial.print(F("  valido           : ")); Serial.println(accel.valido ? "Si" : "No");
     Serial.print(F("  ultima_lectura   : ")); Serial.print(accel.ultima_lectura_ms); Serial.println(F(" ms"));
     Serial.println(F("└───────────────────────────────────────────────┘\n"));
 }
+
+// =============================================================================
+// NOTA sobre la inclinacion de la calzada
+//
+// Si en algun momento se quiere separar la pendiente de la carretera de la
+// aceleracion propia del vehiculo, el camino es filtrar paso bajo el vector de
+// aceleracion antes de calcular los angulos:
+//
+//   static float fx = 0, fy = 0, fz = 1;
+//   const float A = 0.02f;                      // ~ 0.3 Hz a 10 Hz de muestreo
+//   fx += A * (accel.ax - fx);
+//   fy += A * (accel.ay - fy);
+//   fz += A * (accel.az - fz);
+//
+// y usar fx/fy/fz en los atan2. Frenazos y curvas duran pocos segundos y el
+// filtro los elimina; la pendiente de una rampa persiste y sobrevive. No es
+// perfecto (una aceleracion mantenida en una recta larga si contamina), pero
+// sin giroscopo es lo mejor que se puede hacer. El WT31N no lleva giroscopo
+// accesible: emite el paquete 0x52 segun el codigo de ejemplo del datasheet,
+// pero la tabla de especificaciones solo declara acelerometro.
+// =============================================================================

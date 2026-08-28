@@ -42,7 +42,7 @@ void setupGPS() {
         SERIAL_GPS.begin(BAUD_GPS);
         delay(100);
         if (!gpsConfig.begin(SERIAL_GPS)) {
-            Serial.println(F("[GPS] ERROR - No respondio a " _GPS_STR(BAUD_GPS) " tras el cambio de baudrate"));
+            logEvento(F("[GPS] ERROR - No respondio a " _GPS_STR(BAUD_GPS) " tras el cambio de baudrate"));
             return;
         }
     } else {
@@ -50,10 +50,10 @@ void setupGPS() {
         SERIAL_GPS.begin(BAUD_GPS);
         delay(100);
         if (!gpsConfig.begin(SERIAL_GPS)) {
-            Serial.println(F("[GPS] ERROR - No se detecta ni a 9600 ni a " _GPS_STR(BAUD_GPS) " baud"));
+            logEvento(F("[GPS] ERROR - No se detecta ni a 9600 ni a " _GPS_STR(BAUD_GPS) " baud"));
             return;
         }
-        Serial.println(F("[GPS] Modulo ya estaba a " _GPS_STR(BAUD_GPS) " baud (config de un arranque anterior)"));
+        logEvento(F("[GPS] Modulo ya estaba a " _GPS_STR(BAUD_GPS) " baud (config de un arranque anterior)"));
     }
 
     gpsConfig.setNavigationFrequency(FREQ_GPS);
@@ -67,7 +67,7 @@ void setupGPS() {
 
     inicializarInfoGPS();
 
-    Serial.println(F("[GPS] Configuracion aplicada: " _GPS_STR(BAUD_GPS) " baud, " _GPS_STR(FREQ_GPS) "Hz, GGA+RMC"));
+    logEvento(F("[GPS] Configuracion aplicada: " _GPS_STR(BAUD_GPS) " baud, " _GPS_STR(FREQ_GPS) "Hz, GGA+RMC"));
 }
 
 // -----------------------------------------------------------------------------
@@ -84,7 +84,7 @@ void leerGPS() {
 // Inicializa la estructura con valores por defecto
 // -----------------------------------------------------------------------------
 void inicializarInfoGPS() {
-    snprintf(info_gps.timestamp_iso, sizeof(info_gps.timestamp_iso), "0000-00-00T00:00:00");
+    snprintf(info_gps.timestamp_iso, sizeof(info_gps.timestamp_iso), "0000-00-00T00:00:00.000");
     info_gps.anyo                    = 0;
     info_gps.mes                     = 0;
     info_gps.dia                     = 0;
@@ -92,6 +92,7 @@ void inicializarInfoGPS() {
     info_gps.minuto                  = 0;
     info_gps.segundo                 = 0;
     info_gps.centesimas              = 0;
+    info_gps.milisegundos            = 0;
     info_gps.status                  = 'V';
     info_gps.latitud                 = 0.0;
     info_gps.latitud_hemisferio      = '?';
@@ -128,19 +129,23 @@ void actualizarGPS() {
         t.tm_min  = gps.time.minute();
         t.tm_sec  = gps.time.second();
 
-        // Timestamp en formato ISO 8601 (hora LOCAL, pese al formato): YYYY-MM-DDThh:mm:ss
+        // Milisegundos derivados de las centesimas de la trama NMEA (hhmmss.ss):
+        // resolucion real de 10 ms, no de 1 ms, pese al nombre del campo.
+        info_gps.centesimas   = gps.time.centisecond();
+        info_gps.milisegundos = info_gps.centesimas * 10;
+
+        // Timestamp en formato ISO 8601 (hora LOCAL, pese al formato): YYYY-MM-DDThh:mm:ss.mmm
         snprintf(info_gps.timestamp_iso, sizeof(info_gps.timestamp_iso),
-                 "%04d-%02d-%02dT%02d:%02d:%02d",
+                 "%04d-%02d-%02dT%02d:%02d:%02d.%03d",
                  t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-                 t.tm_hour, t.tm_min, t.tm_sec);
+                 t.tm_hour, t.tm_min, t.tm_sec, info_gps.milisegundos);
 
         info_gps.anyo    = gps.date.year();
         info_gps.mes     = gps.date.month();
         info_gps.dia     = gps.date.day();
-        info_gps.hora       = gps.time.hour() + TIMEZONE_OFFSET_HOURS;
-        info_gps.minuto     = gps.time.minute();
-        info_gps.segundo    = gps.time.second();
-        info_gps.centesimas = gps.time.centisecond();
+        info_gps.hora    = gps.time.hour() + TIMEZONE_OFFSET_HOURS;
+        info_gps.minuto  = gps.time.minute();
+        info_gps.segundo = gps.time.second();
     }
 
     // ── Fix fresco ────────────────────────────────────────────────────────

@@ -43,6 +43,7 @@ void setupAccelerometer();
 void inicializarInfoAccel();
 void leerAccel();
 void imprimirAccel();
+void verificarMontaje();
 
 // -----------------------------------------------------------------------------
 // Serialización CSV — cada módulo se encarga de sus propias columnas

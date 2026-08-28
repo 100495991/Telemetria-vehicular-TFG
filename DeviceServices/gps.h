@@ -32,7 +32,7 @@
 struct InfoGPS {
     // --- Timestamp ---
     // Hora LOCAL de Madrid (GPS UTC + TIMEZONE_OFFSET_HOURS), no UTC.
-    char   timestamp_iso[20];  // "YYYY-MM-DDThh:mm:ss" — calculado una vez en actualizarGPS()
+    char   timestamp_iso[24];  // "YYYY-MM-DDThh:mm:ss.mmm" — calculado una vez en actualizarGPS()
     int    anyo;
     int    mes;
     int    dia;
@@ -40,6 +40,10 @@ struct InfoGPS {
     int    minuto;
     int    segundo;
     int    centesimas;
+    // Milisegundos derivados de centesimas (centesimas * 10): la trama NMEA
+    // solo trae dos decimales de segundo (hhmmss.ss), asi que la resolucion
+    // real es de 10 ms, no de 1 ms, aunque el campo se exprese en ms.
+    int    milisegundos;
 
     // --- De GPRMC ---
     char   status;                   // 'A' = válido, 'V' = warning
