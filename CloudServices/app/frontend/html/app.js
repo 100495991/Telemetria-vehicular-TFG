@@ -1,7 +1,7 @@
 /* =============================================================================
    Dashboard de telemetria — logica de cliente
    Consume la API local (mismo origen, via proxy nginx) y refresca:
-     - cabecera (GPRS / GPS / reloj)      /api/latest (implicito via /api/readings)
+     - cabecera (GPRS / GPS / reloj)      ultima fila de /api/readings
      - cuadro de mandos y tarjetas        ultima fila recibida
      - mapa de la ruta                    /api/track
      - graficas                           /api/readings (incremental por since_id)
@@ -102,7 +102,16 @@ function degToCompass(deg) {
 // velocidad/rumbo y arriba-derecha el boton de centrar mapa.
 const map = L.map("map", { zoomControl: false }).setView([40.3317, -3.7684], 15); // UC3M Leganes por defecto
 L.control.zoom({ position: "bottomright" }).addTo(map);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+// Basemap CARTO (Positron). OJO: CARTO exige API key desde 2023 y el
+// endpoint viejo (.../light_all/{z}/{x}/{y}.png) NUNCA la acepta -- devuelve
+// el watermark "API KEY REQUIRED" tanto con key como sin ella, tenga la key
+// el valor que tenga. Hace falta el prefijo /rastertiles/ y el parametro se
+// llama "key" (no "api_key"). Confirmado a mano contra el CDN real:
+//   .../light_all/{z}/{x}/{y}.png?key=...            -> watermark siempre
+//   .../rastertiles/light_all/{z}/{x}/{y}.png?key=... -> tesela real
+// La key llega por window.CARTO_API_KEY, definida en config.js (generado por
+// nginx a partir de CARTO_API_KEY en .env, ver config.js.template).
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=${window.CARTO_API_KEY || ""}`, {
     attribution: "© OpenStreetMap contributors © CARTO",
     maxZoom: 19,
     subdomains: "abcd",
@@ -111,8 +120,8 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
 const ruta = L.polyline([], { color: "#3454d1", weight: 4, opacity: 0.85 }).addTo(map);
 const carIcon = L.divIcon({
     className: "",
-    html: '<div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;"><div class="car-arrow"></div></div>',
-    iconSize: [22, 22], iconAnchor: [11, 11],
+    html: '<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;"><div class="car-arrow"></div></div>',
+    iconSize: [32, 32], iconAnchor: [16, 16],
 });
 let marcador = null;
 let hayRuta = false;

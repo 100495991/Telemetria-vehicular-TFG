@@ -101,6 +101,10 @@ services:
     build: ./app/frontend
     container_name: tfg_web
     restart: unless-stopped
+    environment:
+      # Sustituida en config.js.template al arrancar (ver Dockerfile del
+      # frontend); el mapa la usa para las teselas de CARTO.
+      CARTO_API_KEY: ${CARTO_API_KEY}
     ports:
       - "${WEB_HOST_PORT:-8080}:80"
     depends_on:

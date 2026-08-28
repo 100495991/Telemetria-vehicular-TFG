@@ -80,6 +80,30 @@ void inicializarInfoObd2() {
 }
 
 // -----------------------------------------------------------------------------
+// Sondeo rapido: comprueba si hay ALGO respondiendo por SERIAL_OBD antes de
+// lanzar el handshake completo de myELM327.begin(). Ese handshake es
+// bloqueante y, si el adaptador no esta conectado, puede tardar mas de 10 s
+// en descartarlo (varios comandos de configuracion con timeout largo cada
+// uno). Aqui basta mandar un AT cualquiera (ATI = version del ELM327) y ver
+// si llega una sola respuesta en un plazo corto: si no hay NADA en la linea,
+// no tiene sentido intentar el handshake completo.
+// Devuelve true si se ha detectado alguna respuesta (aunque no sea "OK").
+// -----------------------------------------------------------------------------
+static const unsigned long TIMEOUT_SONDA_MS = 300;
+
+static bool sondaRapidaELM327() {
+    while (SERIAL_OBD.available()) SERIAL_OBD.read(); // limpia basura residual
+
+    SERIAL_OBD.print(F("ATI\r"));
+
+    unsigned long inicio = millis();
+    while (millis() - inicio < TIMEOUT_SONDA_MS) {
+        if (SERIAL_OBD.available()) return true;
+    }
+    return false;
+}
+
+// -----------------------------------------------------------------------------
 // Inicializa el puerto serie y la conexion con el ELM327
 // -----------------------------------------------------------------------------
 void setupObd2() {
@@ -88,6 +112,21 @@ void setupObd2() {
     SERIAL_OBD.begin(BAUD_OBD);
 
     logEvento(F("[OBD2] Conectando con el ELM327..."));
+
+    // Sondeo rapido (unos 300 ms como mucho): si no hay ni un adaptador
+    // conectado a SERIAL_OBD, no tiene sentido esperar el handshake completo
+    // de myELM327.begin(), que en el peor caso (protocolo AUTO + vehiculo sin
+    // responder) puede bloquear el arranque mas de 30 s.
+    if (!sondaRapidaELM327()) {
+        logEvento(F("[OBD2] AVISO - ELM327 no responde por serie, modulo OBD2 desactivado"));
+        return;
+    }
+
+    // Vaciar lo que haya contestado el ATI del sondeo: myELM327.begin() manda
+    // su propia secuencia de comandos y no espera encontrarse esa respuesta
+    // suelta en el buffer.
+    delay(20);
+    while (SERIAL_OBD.available()) SERIAL_OBD.read();
 
     obd2Disponible = myELM327.begin(SERIAL_OBD, false, 2000);
 

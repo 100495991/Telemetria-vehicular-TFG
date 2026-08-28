@@ -16,3 +16,8 @@ más alternativas
 
 Eliminar #include <SdFat.h> de accelerometer.h, gps.h, obd2.h y temperature_sensor.h 
 y comporbar que sigue funcionando
+
+Comprobar que no se usa /api/stats
+
+Eliminar si es posible /api/latest si hacer una llamada a /api/readings 
+con limit 1 es lo mismo.

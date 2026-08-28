@@ -6,10 +6,8 @@ dashboard web. Solo lectura: la escritura la hace el ingestor.
 
 Endpoints:
   GET /api/health              estado del servicio y de la BD
-  GET /api/latest              ultima trama recibida
   GET /api/readings?limit=&since_id=   tramas recientes (para las graficas)
   GET /api/track?limit=        puntos GPS validos (para el mapa)
-  GET /api/stats               resumen (total, primera/ultima, maximos)
   GET /api/trip/csv            CSV del viaje actual (ver trip_csv())
 
 La documentacion interactiva se genera sola en /api/docs (Swagger UI).
@@ -80,17 +78,6 @@ def health():
     except Exception as e:
         log.warning("Healthcheck fallido: %s", e)
         return JSONResponse(status_code=503, content={"status": "degraded", "db": "down"})
-
-
-@app.get("/api/latest")
-def latest():
-    """La trama mas reciente, para las tarjetas en vivo del dashboard."""
-    with get_db() as conn, conn.cursor() as cur:
-        cur.execute("SELECT * FROM telemetria ORDER BY id DESC LIMIT 1")
-        fila = cur.fetchone()
-    if not fila:
-        return JSONResponse(status_code=404, content={"detail": "Aun no hay datos"})
-    return iso(fila)
 
 
 @app.get("/api/readings")
@@ -197,21 +184,3 @@ def trip_csv():
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
     )
-
-
-@app.get("/api/stats")
-def stats():
-    """Resumen para la cabecera del dashboard."""
-    with get_db() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT COUNT(*) AS total, "
-            "MIN(received_at) AS primera, MAX(received_at) AS ultima, "
-            "MAX(velocidad_kmh) AS vel_max, "
-            "MAX(temperatura_neumatico) AS temp_neu_max "
-            "FROM telemetria"
-        )
-        r = cur.fetchone()
-    for k in ("primera", "ultima"):
-        if r.get(k) is not None:
-            r[k] = r[k].isoformat(sep=" ", timespec="milliseconds")
-    return r

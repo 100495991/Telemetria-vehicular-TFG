@@ -1,0 +1,5 @@
+// Generado automaticamente por nginx (envsubst) al arrancar el contenedor,
+// a partir de config.js.template. NO editar el resultado (config.js) a mano:
+// se sobreescribe en cada arranque. Para cambiar la clave, edita CARTO_API_KEY
+// en CloudServices/.env y recrea el contenedor "web".
+window.CARTO_API_KEY = "${CARTO_API_KEY}";

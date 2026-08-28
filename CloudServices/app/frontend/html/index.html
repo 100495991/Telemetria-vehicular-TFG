@@ -17,6 +17,11 @@
     <!-- Chart.js (graficas) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
+    <!-- Config generada por nginx en el arranque del contenedor (envsubst sobre
+         config.js.template) con la CARTO_API_KEY leida de .env. Debe ir antes
+         de app.js, que la usa al construir la URL de las teselas. -->
+    <script src="config.js"></script>
+
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>

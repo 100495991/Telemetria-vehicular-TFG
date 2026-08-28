@@ -1,0 +1,22 @@
+Un apartado de "futuras líneas de trabajo" en un TFG normalmente recoge dos tipos de cosas: limitaciones conocidas del sistema actual que no se han resuelto por falta de tiempo/alcance, y extensiones razonables que se ven venir desde la arquitectura ya construida. Con lo que hemos visto de tu proyecto, te propongo esto, agrupado:
+
+Firmware / hardware
+Redundancia de conectividad: actualmente solo hay GPRS; se podría añadir una capa de reintento con almacenamiento en SD como respaldo real (ya guardas el CSV en SD, pero se podría documentar/implementar una sincronización posterior: al recuperar conexión, subir los tramos que quedaron solo en SD).
+Actualización de firmware remota (OTA): hoy hace falta el USB para reprogramar el Arduino; sería una mejora añadir actualización remota vía el propio canal GPRS.
+Comparativa de alternativas de hardware GPS (ya lo tenías anotado en tu TODO) — encaja bien aquí si no la has hecho ya en el estado del arte: por qué NEO-6M y no otro módulo.
+Más sensores/PIDs OBD2: el sistema ya está preparado para ampliar sin tocar la plataforma (esquema dinámico), así que es una línea de trabajo barata de justificar — añadir más PIDs (temperatura de aceite, presión de neumáticos si el vehículo lo soporta, etc.).
+Plataforma cloud
+Migración a un proveedor cloud (ya lo documentaste tú mismo en DEPLOYMENT.md §10): eliminaría la dependencia de IP dinámica/DuckDNS y de que el PC de casa esté encendido, a cambio de un coste recurrente.
+Cifrado del transporte: hoy MQTT y HTTP van sin TLS (ni mqtts:// ni HTTPS); una línea de trabajo natural es añadir TLS al bróker y al dashboard, especialmente relevante porque el sistema expone ubicación en tiempo real de un vehículo.
+Copias de seguridad de la base de datos: ahora mismo si se pierde el volumen de MySQL se pierde todo el histórico; añadir backups periódicos automáticos.
+Soporte multivehículo: la arquitectura actual asume un único Arduino/vehículo (un topic MQTT, una tabla); extenderla a varios dispositivos identificados de forma independiente sería una ampliación natural del sistema.
+Autenticación por usuario real en vez de una única contraseña compartida en .htpasswd, si se quisiera abrir el acceso a varios usuarios con distintos permisos.
+Visualización / análisis de datos
+Recuperar /api/stats con un uso real: ya que lo acabas de quitar por no usarse, es una línea de trabajo legítima decir que se podría reintroducir como panel de estadísticas agregadas del histórico completo (no solo del viaje actual).
+Análisis histórico y comparación entre viajes: hoy el dashboard se centra en el viaje "actual"; se podría añadir una vista que compare varios trayectos guardados.
+Alertas: notificaciones (p. ej. por Telegram o email) ante eventos como temperatura de neumático anómala, exceso de velocidad, o pérdida prolongada de conexión del vehículo.
+Aplicación móvil nativa en vez de (o además de) el dashboard web, aprovechando que la API ya es independiente del frontend.
+Robustez / mantenimiento
+Métricas y monitorización de la propia plataforma (uptime del bróker, latencia de ingesta, etc.), útil si el sistema se pensara para un uso más allá de la demo del TFG.
+Tests automatizados, tanto del firmware (si es viable con mocks de los sensores) como del backend (ingestor/API), que ahora mismo no parece que existan.
+No hace falta que metas todos — yo elegiría 4-6 que se sientan como una continuación lógica y no forzada de las decisiones que ya justificaste en el resto de la memoria (por ejemplo, el TLS y el hosting en cloud casan muy bien con el apartado de seguridad que ya escribiste). Dime si quieres que te redacte el texto final de este apartado con los que elijas.
