@@ -14,17 +14,18 @@
 #define PIN_SD_CS       53
 #define SD_MHZ          50
 
-#define SERIAL_ACCEL    Serial2 
+#define SERIAL_ACCEL    Serial
 #define BAUD_ACCEL        115200
 #define _orientacionVertical  0
 
 // Pantalla solo con colores azules
 #define MODO_PANTALLA_AZUL 1
 
+#define SERIAL_OBD      Serial2
+#define BAUD_OBD        38400
+
 #define SERIAL_GPRS     Serial3
 #define BAUD_GPRS        115200
 
-#define SERIAL_OBD      Serial
-#define BAUD_OBD        38400
 
 #endif

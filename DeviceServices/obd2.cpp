@@ -91,16 +91,42 @@ void inicializarInfoObd2() {
 // -----------------------------------------------------------------------------
 static const unsigned long TIMEOUT_SONDA_MS = 300;
 
+// Cuantos bytes de la respuesta al sondeo se vuelcan al log (diagnostico).
+static const uint8_t SONDA_DIAG_MAX_BYTES = 16;
+
 static bool sondaRapidaELM327() {
     while (SERIAL_OBD.available()) SERIAL_OBD.read(); // limpia basura residual
 
     SERIAL_OBD.print(F("ATI\r"));
 
+    // Se captura todo lo que llegue durante la ventana de sondeo (no se sale
+    // en el primer byte) para poder volcarlo entero al log: la idea es
+    // distinguir "no llega nada" (adaptador no detectado / puerto equivocado)
+    // de "llega pero corrupto" (p.ej. contencion electrica en TX0/RX0 con el
+    // 16U2 si SERIAL_OBD == Serial). Alarga el sondeo hasta los 300 ms
+    // siempre, incluso cuando ya ha llegado respuesta buena.
+    uint8_t recibidos[SONDA_DIAG_MAX_BYTES];
+    uint8_t n = 0;
+
     unsigned long inicio = millis();
     while (millis() - inicio < TIMEOUT_SONDA_MS) {
-        if (SERIAL_OBD.available()) return true;
+        while (SERIAL_OBD.available() && n < SONDA_DIAG_MAX_BYTES) {
+            recibidos[n++] = SERIAL_OBD.read();
+        }
     }
-    return false;
+
+    char msg[16 + 3 * SONDA_DIAG_MAX_BYTES];
+    if (n == 0) {
+        logEvento(F("[OBD2] Sondeo ATI: 0 bytes recibidos"));
+    } else {
+        int pos = snprintf(msg, sizeof(msg), "[OBD2] Sondeo ATI %ub:", n);
+        for (uint8_t i = 0; i < n && pos < (int)sizeof(msg) - 3; i++) {
+            pos += snprintf(msg + pos, sizeof(msg) - pos, " %02X", recibidos[i]);
+        }
+        logEvento(msg);
+    }
+
+    return n > 0;
 }
 
 // -----------------------------------------------------------------------------

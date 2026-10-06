@@ -206,7 +206,7 @@ a:hover { color: var(--accent-dark); }
     width: 0; height: 0;
     border-left: 12px solid transparent;
     border-right: 12px solid transparent;
-    border-bottom: 24px solid #e11d2e;
+    border-bottom: 24px solid #1e3a8a;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
 }
 

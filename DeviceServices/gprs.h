@@ -91,6 +91,12 @@
 // reconectar desde cero, ignorando lo que diga connected().
 #define TIMEOUT_SIN_PUBLICAR_OK 20000UL
 
+// Con CIPQSEND=0, un mqtt.publish() que devuelve false es ya un fallo de
+// entrega real (SEND FAIL), no un simple problema de encolado. No hace falta
+// esperar a TIMEOUT_SIN_PUBLICAR_OK: tras este numero de fallos SEGUIDOS se
+// fuerza la reconexion de inmediato, sin esperar el resto de la ventana.
+#define MAX_FALLOS_PUBLICACION_SEGUIDOS 3
+
 struct InfoGPRS {
     bool          estado;             // true = conectado al broker MQTT
     int           rssi;               // Calidad de señal (AT+CSQ): 0-31

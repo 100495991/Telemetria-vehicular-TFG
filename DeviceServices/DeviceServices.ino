@@ -13,10 +13,10 @@ bool primerFixObtenido = false;
 void setup() {
 
     // Serial.begin(BAUD_DEBUG);    // Monitor serie del PC (debug)
-    delay(5000);
+    delay(3000);
     setupSDCard();               // Inicializa SD + abre LOG.TXT
     setupGPS();                  // Inicializa Serial1 + estructura InfoGPS
-    setupAccelerometer();        // Inicializa Serial2 + acelerometro
+    setupAccelerometer();        // Inicializa Serial0 + acelerometro
     setupTemperatureSensor();    // Inicializa I2C + sensor IR MLX90614
     delay(500);
     setupObd2();                 // Inicializa el ELM327

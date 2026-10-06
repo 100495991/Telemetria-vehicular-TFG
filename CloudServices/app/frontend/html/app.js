@@ -148,7 +148,22 @@ async function refrescarMapa() {
             return;
         }
 
-        const coords = pts.map(p => [p.latitud, p.longitud]);
+        // pts trae los ultimos N puntos de TODA la tabla, no solo del viaje
+        // actual: si el vehiculo estuvo apagado y volvio a arrancar, incluye
+        // tambien la cola del viaje anterior. Se busca hacia atras el ultimo
+        // hueco > VIAJE_ANTIGUO_MS entre dos puntos consecutivos y solo se
+        // pinta desde ahi, para no dibujar una linea recta uniendo el final
+        // de la conexion antigua con el inicio de la actual.
+        let inicio = 0;
+        for (let i = pts.length - 1; i > 0; i--) {
+            if (parseUTC(pts[i].received_at) - parseUTC(pts[i - 1].received_at) > VIAJE_ANTIGUO_MS) {
+                inicio = i;
+                break;
+            }
+        }
+        const ptsViajeActual = pts.slice(inicio);
+
+        const coords = ptsViajeActual.map(p => [p.latitud, p.longitud]);
         ruta.setLatLngs(coords);
         if (!hayRuta) {
             map.fitBounds(ruta.getBounds(), { padding: [30, 30] });

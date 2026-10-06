@@ -280,26 +280,3 @@ size_t escribirDatosGPS(char* dst, size_t espacio) {
         hdopCalidad(info_gps.hdop)
     ), espacio);
 }
-
-// -----------------------------------------------------------------------------
-// Imprime toda la estructura por el monitor serie
-// -----------------------------------------------------------------------------
-void imprimirInfo() {
-    Serial.println(F("┌─ INFO GPS ──────────────────────────────┐"));
-
-    Serial.print(F("  timestamp_local      : ")); Serial.println(info_gps.timestamp_iso);
-    Serial.print(F("  status               : ")); Serial.println(info_gps.status);
-    Serial.print(F("  latitud              : ")); Serial.println(info_gps.latitud,  6);
-    Serial.print(F("  latitud_hemisferio   : ")); Serial.println(info_gps.latitud_hemisferio);
-    Serial.print(F("  longitud             : ")); Serial.println(info_gps.longitud, 6);
-    Serial.print(F("  longitud_hemisferio  : ")); Serial.println(info_gps.longitud_hemisferio);
-    Serial.print(F("  velocidad_kmh        : ")); Serial.println(info_gps.velocidad_kmh, 2);
-    Serial.print(F("  rumbo_grados         : ")); Serial.println(info_gps.rumbo_grados,  2);
-    Serial.print(F("  fix_quality          : ")); Serial.print(info_gps.fix_quality);
-    Serial.print(F(" (")); Serial.print(fixQualityDesc(info_gps.fix_quality)); Serial.println(F(")"));
-    Serial.print(F("  n_satelites_en_uso   : ")); Serial.println(info_gps.n_satelites_en_uso);
-    Serial.print(F("  altitud_m            : ")); Serial.println(info_gps.altitud_m, 1);
-    Serial.print(F("  hdop                 : ")); Serial.print(info_gps.hdop, 2);
-    Serial.print(F(" (")); Serial.print(hdopCalidad(info_gps.hdop)); Serial.println(F(")"));
-    Serial.println(F("└─────────────────────────────────────────┘\n"));
-}

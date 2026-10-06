@@ -157,7 +157,6 @@ static void logEventoImpl(T msg) {
     // Serial.println(msg);
 
     if (!sdOK || !logFile) return;
-    // Serial.println(F("[LOG-DEBUG] paso el guard, va a tocar la SD"));
 
     if (info_gps.valido) {
         logFile.print('[');
@@ -267,5 +266,4 @@ void cerrarSD() {
         logFile.close();
     }
     dataFileOpen = false;
-    // Serial.println(F("[SD] Ficheros cerrados correctamente"));
 }

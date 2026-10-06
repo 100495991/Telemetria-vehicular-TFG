@@ -46,6 +46,11 @@ static unsigned long tUltimoEnvioOk      = 0;   // Ultima vez que un mqtt.publis
 // estado raro y hace falta repetir la secuencia de init desde cero.
 static uint8_t contadorFallosGPRS = 0;
 
+// Fallos de mqtt.publish() seguidos ya en GPRS_MQTT_ACTIVO (con CIPQSEND=0,
+// cada uno es un SEND FAIL real, no un simple encolado). Se resetea con
+// cualquier publicacion confirmada.
+static uint8_t fallosPublicacionSeguidos = 0;
+
 InfoGPRS infoGPRS = { false, 99, 0 };
 
 // -----------------------------------------------
@@ -311,7 +316,17 @@ void gestionarGPRS() {
         case GPRS_CONFIGURAR_MODOS: {
             modem.sendAT(GF("+CIPMUX=1"));    // modo multi-conexion (CIPSTART con mux)
             modem.waitResponse(TIMEOUT_ATCORTO);
-            modem.sendAT(GF("+CIPQSEND=1"));  // modo de envio rapido (sin "SEND OK" extra)
+            // OJO: NO usar CIPQSEND=1 ("envio rapido"). Ese modo omite la
+            // confirmacion SEND OK/SEND FAIL de cada CIPSEND, asi que
+            // mqtt.publish() devuelve true en cuanto el dato sale hacia el
+            // modem, sin saber si la red movil llego a entregarlo. Durante un
+            // corte de sesion eso hace que tUltimoEnvioOk seguir refrescandose
+            // con exitos ficticios, y el vigilante de sesion zombi
+            // (TIMEOUT_SIN_PUBLICAR_OK) nunca llega a dispararse. En modo
+            // normal (CIPQSEND=0) cada escritura espera esa confirmacion, asi
+            // que un fallo de entrega real se refleja de inmediato en el
+            // resultado de publish().
+            modem.sendAT(GF("+CIPQSEND=0"));
             modem.waitResponse(TIMEOUT_ATCORTO);
             modem.sendAT(GF("+CIPRXGET=1"));  // lectura manual de datos entrantes
             modem.waitResponse(TIMEOUT_ATCORTO);
@@ -419,6 +434,7 @@ void gestionarGPRS() {
                 tUltimaCompRed = ahora;
                 tUltimoEnvioOk = ahora;
                 contadorFallosGPRS = 0;
+                fallosPublicacionSeguidos = 0;
 
                 infoGPRS.estado = true;
                 const char* cabecera = construirCabeceraCSV();
@@ -468,8 +484,20 @@ void gestionarGPRS() {
                     if (mqtt.publish(MQTT_TOPIC, trama)) {
                         infoGPRS.paquetesEnviados++;
                         tUltimoEnvioOk = ahora;
+                        fallosPublicacionSeguidos = 0;
                     } else {
                         logEvento(F("MQTT: Fallo al publicar (desconexion)"));
+                        // Con CIPQSEND=0 este "false" ya refleja un fallo de
+                        // entrega real (SEND FAIL), no solo de encolado. No
+                        // hace falta esperar a TIMEOUT_SIN_PUBLICAR_OK: tras
+                        // unos pocos fallos seguidos se fuerza la reconexion
+                        // ya mismo, en vez de seguir intentando publicar sobre
+                        // una sesion que ya sabemos que esta caida.
+                        fallosPublicacionSeguidos++;
+                        if (fallosPublicacionSeguidos >= MAX_FALLOS_PUBLICACION_SEGUIDOS) {
+                            fallarConexionDatos(F("MQTT: Varios fallos de entrega seguidos, reconectando"), ahora);
+                            break;
+                        }
                     }
                 }
                 tUltimaPublicacion = ahora;
